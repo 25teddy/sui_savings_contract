@@ -85,12 +85,12 @@ module savings_plan::contract {
         BalanceModule::join(&mut plan.totalShares, coin_balance);
 
         // next update the available shares
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds + shares;
+        let prevAvailableFunds = plan.availableFunds;
+        plan.availableFunds += shares;
 
         // increase the member count
-        let oldCount = &plan.members;
-        plan.members = *oldCount + 1;
+        let oldCount = plan.members;
+        plan.members += 1;
 
         let accountCap = AccountCap {
             id: ObjectModule::new(ctx),
@@ -103,7 +103,7 @@ module savings_plan::contract {
 
     public fun increase_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: Coin<SUI>, _ctx: &mut TxContext) {
         // check that user passes in the right objects
-        assert!(&accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
 
         // get shares amount
         let shares = CoinModule::value(&amount);
@@ -113,17 +113,17 @@ module savings_plan::contract {
         BalanceModule::join(&mut plan.totalShares, coin_balance);
 
         // next update the available shares
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds + shares;
+        let prevAvailableFunds = plan.availableFunds;
+        plan.availableFunds += shares;
 
         // get the old shares
-        let prevShares = &accountCap.shares;
-        accountCap.shares = *prevShares + shares;
+        let prevShares = accountCap.shares;
+        accountCap.shares += shares;
     }
 
     public fun redeem_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: u64, ctx: &mut TxContext): Coin<SUI> {
         // check that user passes in the right objects
-        assert!(&accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
 
         // check that user has enough shares
         assert!(accountCap.shares >= amount, EAccountSharesNotSufficient);
@@ -132,12 +132,12 @@ module savings_plan::contract {
         assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
 
         // next update the available shares
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds - amount;
+        let prevAvailableFunds = plan.availableFunds;
+        plan.availableFunds -= amount;
 
         // get the old shares
-        let prevShares = &accountCap.shares;
-        accountCap.shares = *prevShares - amount;
+        let prevShares = accountCap.shares;
+        accountCap.shares -= amount;
 
         // wrap balance with coin
         let redeemedShares = CoinModule::take(&mut plan.totalShares, amount, ctx);
@@ -153,7 +153,7 @@ module savings_plan::contract {
         ctx: &mut TxContext
     ) {
         // check that user passes in the right objects
-        assert!(&accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
 
         // check that there are available shares to complete the transaction
         assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
@@ -180,11 +180,11 @@ module savings_plan::contract {
         transfer::share_object(saving);
 
         // next lock funds
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds - amount;
+        let prevAvailableFunds = plan.availableFunds;
+        plan.availableFunds -= amount;
 
-        let prevLockedFunds = &plan.lockedFunds;
-        plan.lockedFunds = *prevLockedFunds + amount;
+        let prevLockedFunds = plan.lockedFunds;
+        plan.lockedFunds += amount;
     }
 
     public fun vote_saving(
@@ -195,8 +195,8 @@ module savings_plan::contract {
         ctx: &mut TxContext
     ) {
         // check that user passes in the right objects
-        assert!(&accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
-        assert!(&saving.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(saving.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
 
         // check that time for voting has not elapsed
         assert!(saving.ends > ClockModule::timestamp_ms(clock), EVotingEnded);
@@ -205,8 +205,8 @@ module savings_plan::contract {
         assert!(!vector::contains(&saving.voters, &TxContextModule::sender(ctx)), EAlreadyVoted);
 
         // update saving votes
-        let prevVotes = &saving.votes;
-        saving.votes = *prevVotes + accountCap.shares;
+        let prevVotes = saving.votes;
+        saving.votes += accountCap.shares;
 
         vector::push_back(&mut saving.voters, TxContextModule::sender(ctx));
     }
@@ -219,8 +219,8 @@ module savings_plan::contract {
         ctx: &mut TxContext
     ): (bool, Coin<SUI>) {
         // check that user passes in the right objects
-        assert!(&accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
-        assert!(&saving.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(accountCap.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(saving.planId == ObjectModule::uid_as_inner(&plan.id), EWrongPlan);
 
         // check that time for voting has elapsed
         assert!(saving.ends < ClockModule::timestamp_ms(clock), EVotingNotEnded);
@@ -234,9 +234,9 @@ module savings_plan::contract {
         saving.ended = true;
 
         // unlock funds
-        plan.lockedFunds = plan.lockedFunds - saving.amount;
+        plan.lockedFunds -= saving.amount;
 
-        if (result >= plan.quorum) {
+        if result >= plan.quorum {
             // set saving as executed
             saving.executed = true;
 
@@ -247,7 +247,7 @@ module savings_plan::contract {
             (true, payment)
         } else {
             // release funds back to available funds
-            plan.availableFunds = plan.availableFunds + saving.amount;
+            plan.availableFunds += saving.amount;
 
             // create empty coin
             let nullCoin = CoinModule::from_balance(BalanceModule::zero(), ctx);
@@ -257,22 +257,27 @@ module savings_plan::contract {
         }
     }
 
+    // Function to get account shares
     public fun get_account_shares(accountCap: &AccountCap): u64 {
         accountCap.shares
     }
 
+    // Function to get plan total shares
     public fun get_plan_total_shares(plan: &Plan): u64 {
         BalanceModule::value(&plan.totalShares)
     }
 
+    // Function to get plan locked funds
     public fun get_plan_locked_funds(plan: &Plan): u64 {
         plan.lockedFunds
     }
 
+    // Function to get plan available funds
     public fun get_plan_available_funds(plan: &Plan): u64 {
         plan.availableFunds
     }
 
+    // Function to get saving votes
     public fun get_saving_votes(saving: &Saving): u64 {
         saving.votes
     }
