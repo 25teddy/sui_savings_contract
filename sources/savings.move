@@ -7,6 +7,7 @@ module savings_plan::contract {
     use sui::transfer;
     use sui::tx_context::{Self as TxContextModule, TxContext};
     use std::vector;
+    use sui::random::random;
 
     // Errors
     const EWrongPlan: u64 = 9;
@@ -15,6 +16,7 @@ module savings_plan::contract {
     const EAlreadyVoted: u64 = 12;
     const EVotingEnded: u64 = 13;
     const EVotingNotEnded: u64 = 14;
+    const EInsufficientBalanceForKYC: u64 = 15;
 
     // Plan data
     struct Plan has key {
@@ -25,6 +27,7 @@ module savings_plan::contract {
         members: u32,
         quorum: u64,
         voteTime: u64,
+        minBalanceForVoting: u64,
     }
 
     // Saving data
@@ -47,7 +50,7 @@ module savings_plan::contract {
         shares: u64
     }
 
-    fun create_plan(ctx: &mut TxContext) {
+    fun create_plan(ctx: &mut TxContext, min_balance_for_voting: u64) {
         // set quorum to 70;
         let quorum: u64 = 70;
 
@@ -63,6 +66,7 @@ module savings_plan::contract {
             members: 0,
             quorum,
             voteTime,
+            minBalanceForVoting,
         };
 
         // allow everyone to be able to access the plan
@@ -70,7 +74,7 @@ module savings_plan::contract {
     }
 
     fun init(ctx: &mut TxContext) {
-        create_plan(ctx);
+        create_plan(ctx, 1000); // Set a default minimum balance requirement for voting
     }
 
     public fun join_plan(plan: &mut Plan, amount: Coin<SUI>, ctx: &mut TxContext): AccountCap {
@@ -158,6 +162,9 @@ module savings_plan::contract {
         // check that there are available shares to complete the transaction
         assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
 
+        // check if the user has the minimum balance required for voting
+        assert!(accountCap.shares >= plan.minBalanceForVoting, EInsufficientBalanceForKYC);
+
         // get the plan id
         let planId = ObjectModule::uid_to_inner(&plan.id);
 
@@ -227,7 +234,6 @@ module savings_plan::contract {
 
         // calculate voting result
         let amountTotalShares = BalanceModule::value(&plan.totalShares);
-
         let result = (saving.votes / amountTotalShares) * 100;
 
         // set plan as ended
@@ -236,7 +242,7 @@ module savings_plan::contract {
         // unlock funds
         plan.lockedFunds = plan.lockedFunds - saving.amount;
 
-        if (result >= plan.quorum) {
+        if result >= plan.quorum {
             // set saving as executed
             saving.executed = true;
 
