@@ -1,4 +1,4 @@
-module savings_plan::contract {
+module savings::contract {
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
     use sui::object::{Self, ID, UID};
