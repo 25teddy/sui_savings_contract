@@ -3,7 +3,7 @@ module savings::contract {
     use sui::coin::{Self, Coin};
     use sui::object::{Self, ID, UID};
     use sui::sui::SUI;
-    use sui::clock::{Self, Clock};
+    use sui::clock::{Self, Clock, timestamp_ms};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     use std::vector;
@@ -44,7 +44,8 @@ module savings::contract {
         id: UID,
         planId: ID,
         balance: Balance<SUI>,
-        shares: u64
+        shares: u64,
+        locked: u64
     }
 
     fun create_plan(ctx: &mut TxContext) {
@@ -88,7 +89,8 @@ module savings::contract {
             id: object::new(ctx),
             balance: balance::zero(),
             planId,
-            shares
+            shares,
+            locked: 0
         };
         // add the amount to the plan total shares
         let coin_balance = coin::into_balance(amount);
@@ -127,48 +129,46 @@ module savings::contract {
         coin_
     }
 
-    // public fun create_saving(
-    //     plan: &mut Plan,
-    //     accountCap: &mut AccountCap,
-    //     amount: u64,
-    //     recipient: address,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext
-    // ) {
-    //     // check that user passes in the right objects
-    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    public fun create_saving(
+        plan: &mut Plan,
+        acc: &mut Account,
+        c: &Clock,
+        amount: u64,
+        recipient: address,
+        ctx: &mut TxContext
+    ) {
+        // check that user passes in the right objects
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        // check that there are available shares to complete the transaction
+        assert!(acc.shares >= amount, EPlanBalanceNotEnough);
+        // get the plan id
+        let planId = object::uid_to_inner(&plan.id);
+        // get time
+        let ends = timestamp_ms(c) + plan.voteTime;
+        // generate saving
+        let saving = Saving {
+            id: object::new(ctx),
+            planId,
+            amount,
+            recipient,
+            votes: 0,
+            voters: vector::empty(),
+            ends,
+            executed: false,
+            ended: false,
+        };
 
-    //     // check that there are available shares to complete the transaction
-    //     assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
+        transfer::share_object(saving);
 
-    //     // get the plan id
-    //     let planId = object::uid_to_inner(&plan.id);
+        // next lock funds
+        let prevAvailableFunds = &plan.availableFunds;
+        plan.availableFunds = *prevAvailableFunds - amount;
 
-    //     // get time
-    //     let ends = clock::timestamp_ms(clock) + plan.voteTime;
-
-    //     // generate saving
-    //     let saving = Saving {
-    //         id: object::new(ctx),
-    //         planId,
-    //         amount,
-    //         recipient,
-    //         votes: 0,
-    //         voters: vector::empty(),
-    //         ends,
-    //         executed: false,
-    //         ended: false,
-    //     };
-
-    //     transfer::share_object(saving);
-
-    //     // next lock funds
-    //     let prevAvailableFunds = &plan.availableFunds;
-    //     plan.availableFunds = *prevAvailableFunds - amount;
-
-    //     let prevLockedFunds = &plan.lockedFunds;
-    //     plan.lockedFunds = *prevLockedFunds + amount;
-    // }
+        let prevLockedFunds = &plan.lockedFunds;
+        plan.lockedFunds = *prevLockedFunds + amount;
+        // locked the funds from account object. 
+        acc.locked = acc.locked + amount;
+    }
 
     // public fun vote_saving(
     //     plan: &mut Plan,
