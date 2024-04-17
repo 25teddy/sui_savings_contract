@@ -113,28 +113,19 @@ module savings::contract {
         acc.shares = *prevShares + shares;
     }
 
-    // public fun redeem_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: u64, ctx: &mut TxContext): Coin<SUI> {
-    //     // check that user passes in the right objects
-    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-
-    //     // check that user has enough shares
-    //     assert!(accountCap.shares >= amount, EAccountSharesNotSufficient);
-
-    //     // check that there are available shares to complete the transaction
-    //     assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
-
-    //     // next update the available shares
-    //     let prevAvailableFunds = &plan.availableFunds;
-    //     plan.availableFunds = *prevAvailableFunds - amount;
-
-    //     // get the old shares
-    //     let prevShares = &accountCap.shares;
-    //     accountCap.shares = *prevShares - amount;
-
-    //     // wrap balance with coin
-    //     let redeemedShares = coin::take(&mut plan.totalShares, amount, ctx);
-    //     redeemedShares
-    // }
+    public fun redeem_shares(plan: &mut Plan, acc: &mut Account, amount: u64, ctx: &mut TxContext): Coin<SUI> {
+        // check that user passes in the right objects
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        // next update the available shares
+        let prevAvailableFunds = &plan.availableFunds;
+        plan.availableFunds = *prevAvailableFunds - amount;
+        // get the old shares
+        let prevShares = &acc.shares;
+        acc.shares = *prevShares - amount;
+        // wrap balance with coin
+        let coin_ = coin::take(&mut acc.balance, amount, ctx);
+        coin_
+    }
 
     // public fun create_saving(
     //     plan: &mut Plan,
