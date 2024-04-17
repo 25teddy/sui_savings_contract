@@ -19,7 +19,6 @@ module savings_plan::contract {
     // Plan data
     struct Plan has key {
         id: UID,
-        totalShares: Balance<SUI>,
         lockedFunds: u64,
         availableFunds: u64,
         members: u32,
@@ -41,8 +40,9 @@ module savings_plan::contract {
     }
 
     // AccountCap for plan members
-    struct AccountCap has key, store {
+    struct Account has key, store {
         id: UID,
+        balance: Balance<SUI>,
         planId: ID,
         shares: u64
     }
@@ -57,7 +57,6 @@ module savings_plan::contract {
         // populate the plan
         let plan = Plan {
             id: object::new(ctx),
-            totalShares: balance::zero(),
             lockedFunds: 0,
             availableFunds: 0,
             members: 0,
@@ -73,207 +72,204 @@ module savings_plan::contract {
         create_plan(ctx);
     }
 
-    public fun join_plan(plan: &mut Plan, amount: Coin<SUI>, ctx: &mut TxContext): AccountCap {
+    public fun join_plan(plan: &mut Plan, amount: Coin<SUI>, ctx: &mut TxContext): Account {
         // get the plan id
         let planId = object::uid_to_inner(&plan.id);
-
         // get shares amount
         let shares = coin::value(&amount);
-
-        // add the amount to the plan total shares
-        let coin_balance = coin::into_balance(amount);
-        balance::join(&mut plan.totalShares, coin_balance);
-
         // next update the available shares
         let prevAvailableFunds = &plan.availableFunds;
         plan.availableFunds = *prevAvailableFunds + shares;
-
         // increase the member count
         let oldCount = &plan.members;
         plan.members = *oldCount + 1;
-
-        let accountCap = AccountCap {
+        // create Account object 
+        let account = Account {
             id: object::new(ctx),
+            balance: balance::zero(),
             planId,
             shares
         };
-
-        accountCap
-    }
-
-    public fun increase_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: Coin<SUI>, _ctx: &mut TxContext) {
-        // check that user passes in the right objects
-        assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-
-        // get shares amount
-        let shares = coin::value(&amount);
-
         // add the amount to the plan total shares
         let coin_balance = coin::into_balance(amount);
-        balance::join(&mut plan.totalShares, coin_balance);
+        balance::join(&mut account.balance, coin_balance);
 
-        // next update the available shares
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds + shares;
-
-        // get the old shares
-        let prevShares = &accountCap.shares;
-        accountCap.shares = *prevShares + shares;
+        account
     }
 
-    public fun redeem_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: u64, ctx: &mut TxContext): Coin<SUI> {
-        // check that user passes in the right objects
-        assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    // public fun increase_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: Coin<SUI>, _ctx: &mut TxContext) {
+    //     // check that user passes in the right objects
+    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-        // check that user has enough shares
-        assert!(accountCap.shares >= amount, EAccountSharesNotSufficient);
+    //     // get shares amount
+    //     let shares = coin::value(&amount);
 
-        // check that there are available shares to complete the transaction
-        assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
+    //     // add the amount to the plan total shares
+    //     let coin_balance = coin::into_balance(amount);
+    //     balance::join(&mut plan.totalShares, coin_balance);
 
-        // next update the available shares
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds - amount;
+    //     // next update the available shares
+    //     let prevAvailableFunds = &plan.availableFunds;
+    //     plan.availableFunds = *prevAvailableFunds + shares;
 
-        // get the old shares
-        let prevShares = &accountCap.shares;
-        accountCap.shares = *prevShares - amount;
+    //     // get the old shares
+    //     let prevShares = &accountCap.shares;
+    //     accountCap.shares = *prevShares + shares;
+    // }
 
-        // wrap balance with coin
-        let redeemedShares = coin::take(&mut plan.totalShares, amount, ctx);
-        redeemedShares
-    }
+    // public fun redeem_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: u64, ctx: &mut TxContext): Coin<SUI> {
+    //     // check that user passes in the right objects
+    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-    public fun create_saving(
-        plan: &mut Plan,
-        accountCap: &mut AccountCap,
-        amount: u64,
-        recipient: address,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ) {
-        // check that user passes in the right objects
-        assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    //     // check that user has enough shares
+    //     assert!(accountCap.shares >= amount, EAccountSharesNotSufficient);
 
-        // check that there are available shares to complete the transaction
-        assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
+    //     // check that there are available shares to complete the transaction
+    //     assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
 
-        // get the plan id
-        let planId = object::uid_to_inner(&plan.id);
+    //     // next update the available shares
+    //     let prevAvailableFunds = &plan.availableFunds;
+    //     plan.availableFunds = *prevAvailableFunds - amount;
 
-        // get time
-        let ends = clock::timestamp_ms(clock) + plan.voteTime;
+    //     // get the old shares
+    //     let prevShares = &accountCap.shares;
+    //     accountCap.shares = *prevShares - amount;
 
-        // generate saving
-        let saving = Saving {
-            id: object::new(ctx),
-            planId,
-            amount,
-            recipient,
-            votes: 0,
-            voters: vector::empty(),
-            ends,
-            executed: false,
-            ended: false,
-        };
+    //     // wrap balance with coin
+    //     let redeemedShares = coin::take(&mut plan.totalShares, amount, ctx);
+    //     redeemedShares
+    // }
 
-        transfer::share_object(saving);
+    // public fun create_saving(
+    //     plan: &mut Plan,
+    //     accountCap: &mut AccountCap,
+    //     amount: u64,
+    //     recipient: address,
+    //     clock: &Clock,
+    //     ctx: &mut TxContext
+    // ) {
+    //     // check that user passes in the right objects
+    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-        // next lock funds
-        let prevAvailableFunds = &plan.availableFunds;
-        plan.availableFunds = *prevAvailableFunds - amount;
+    //     // check that there are available shares to complete the transaction
+    //     assert!(plan.availableFunds >= amount, EPlanBalanceNotEnough);
 
-        let prevLockedFunds = &plan.lockedFunds;
-        plan.lockedFunds = *prevLockedFunds + amount;
-    }
+    //     // get the plan id
+    //     let planId = object::uid_to_inner(&plan.id);
 
-    public fun vote_saving(
-        plan: &mut Plan,
-        accountCap: &mut AccountCap,
-        saving: &mut Saving,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ) {
-        // check that user passes in the right objects
-        assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-        assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    //     // get time
+    //     let ends = clock::timestamp_ms(clock) + plan.voteTime;
 
-        // check that time for voting has not elapsed
-        assert!(saving.ends > clock::timestamp_ms(clock), EVotingEnded);
+    //     // generate saving
+    //     let saving = Saving {
+    //         id: object::new(ctx),
+    //         planId,
+    //         amount,
+    //         recipient,
+    //         votes: 0,
+    //         voters: vector::empty(),
+    //         ends,
+    //         executed: false,
+    //         ended: false,
+    //     };
 
-        // check that user has not voted;
-        assert!(!vector::contains(&saving.voters, &tx_context::sender(ctx)), EAlreadyVoted);
+    //     transfer::share_object(saving);
 
-        // update saving votes
-        let prevVotes = &saving.votes;
-        saving.votes = *prevVotes + accountCap.shares;
+    //     // next lock funds
+    //     let prevAvailableFunds = &plan.availableFunds;
+    //     plan.availableFunds = *prevAvailableFunds - amount;
 
-        vector::push_back(&mut saving.voters, tx_context::sender(ctx));
-    }
+    //     let prevLockedFunds = &plan.lockedFunds;
+    //     plan.lockedFunds = *prevLockedFunds + amount;
+    // }
 
-    public fun execute_saving(
-        plan: &mut Plan,
-        accountCap: &mut AccountCap,
-        saving: &mut Saving,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ): (bool, Coin<SUI>) {
-        // check that user passes in the right objects
-        assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-        assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    // public fun vote_saving(
+    //     plan: &mut Plan,
+    //     accountCap: &mut AccountCap,
+    //     saving: &mut Saving,
+    //     clock: &Clock,
+    //     ctx: &mut TxContext
+    // ) {
+    //     // check that user passes in the right objects
+    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    //     assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-        // check that time for voting has elapsed
-        assert!(saving.ends < clock::timestamp_ms(clock), EVotingNotEnded);
+    //     // check that time for voting has not elapsed
+    //     assert!(saving.ends > clock::timestamp_ms(clock), EVotingEnded);
 
-        // calculate voting result
-        let amountTotalShares = balance::value(&plan.totalShares);
+    //     // check that user has not voted;
+    //     assert!(!vector::contains(&saving.voters, &tx_context::sender(ctx)), EAlreadyVoted);
 
-        let result = (saving.votes / amountTotalShares) * 100;
+    //     // update saving votes
+    //     let prevVotes = &saving.votes;
+    //     saving.votes = *prevVotes + accountCap.shares;
 
-        // set plan as ended
-        saving.ended = true;
+    //     vector::push_back(&mut saving.voters, tx_context::sender(ctx));
+    // }
 
-        // unlock funds
-        plan.lockedFunds = plan.lockedFunds - saving.amount;
+    // public fun execute_saving(
+    //     plan: &mut Plan,
+    //     accountCap: &mut AccountCap,
+    //     saving: &mut Saving,
+    //     clock: &Clock,
+    //     ctx: &mut TxContext
+    // ): (bool, Coin<SUI>) {
+    //     // check that user passes in the right objects
+    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    //     assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-        if (result >= plan.quorum) {
-            // set saving as executed
-            saving.executed = true;
+    //     // check that time for voting has elapsed
+    //     assert!(saving.ends < clock::timestamp_ms(clock), EVotingNotEnded);
 
-            // get payment coin
-            let payment = coin::take(&mut plan.totalShares, saving.amount, ctx);
+    //     // calculate voting result
+    //     let amountTotalShares = balance::value(&plan.totalShares);
 
-            // return result
-            (true, payment)
-        } else {
-            // release funds back to available funds
-            plan.availableFunds = plan.availableFunds + saving.amount;
+    //     let result = (saving.votes / amountTotalShares) * 100;
 
-            // create empty coin
-            let nullCoin = coin::from_balance(balance::zero(), ctx);
+    //     // set plan as ended
+    //     saving.ended = true;
 
-            // return result
-            (false, nullCoin)
-        }
-    }
+    //     // unlock funds
+    //     plan.lockedFunds = plan.lockedFunds - saving.amount;
 
-    public fun get_account_shares(accountCap: &AccountCap): u64 {
-        accountCap.shares
-    }
+    //     if (result >= plan.quorum) {
+    //         // set saving as executed
+    //         saving.executed = true;
 
-    public fun get_plan_total_shares(plan: &Plan): u64 {
-        balance::value(&plan.totalShares)
-    }
+    //         // get payment coin
+    //         let payment = coin::take(&mut plan.totalShares, saving.amount, ctx);
 
-    public fun get_plan_locked_funds(plan: &Plan): u64 {
-        plan.lockedFunds
-    }
+    //         // return result
+    //         (true, payment)
+    //     } else {
+    //         // release funds back to available funds
+    //         plan.availableFunds = plan.availableFunds + saving.amount;
 
-    public fun get_plan_available_funds(plan: &Plan): u64 {
-        plan.availableFunds
-    }
+    //         // create empty coin
+    //         let nullCoin = coin::from_balance(balance::zero(), ctx);
 
-    public fun get_saving_votes(saving: &Saving): u64 {
-        saving.votes
-    }
+    //         // return result
+    //         (false, nullCoin)
+    //     }
+    // }
+
+    // public fun get_account_shares(accountCap: &AccountCap): u64 {
+    //     accountCap.shares
+    // }
+
+    // public fun get_plan_total_shares(plan: &Plan): u64 {
+    //     balance::value(&plan.totalShares)
+    // }
+
+    // public fun get_plan_locked_funds(plan: &Plan): u64 {
+    //     plan.lockedFunds
+    // }
+
+    // public fun get_plan_available_funds(plan: &Plan): u64 {
+    //     plan.availableFunds
+    // }
+
+    // public fun get_saving_votes(saving: &Saving): u64 {
+    //     saving.votes
+    // }
 }
