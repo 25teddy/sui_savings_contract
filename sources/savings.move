@@ -239,6 +239,25 @@ module savings::contract {
         }
     }
 
+    public fun witdraw(     
+        plan: &mut Plan,
+        acc: &mut Account,
+        saving: &mut Saving,
+        amount: u64,
+        ctx: &mut TxContext
+    ) : Coin<SUI> {
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        assert!((balance::value(&acc.balance) - (acc.locked + amount) > 0), EPlanBalanceNotEnough);
+        let prevAvailableFunds = &plan.availableFunds;
+        plan.availableFunds = *prevAvailableFunds - amount;
+        // get the old shares
+        let prevShares = acc.shares;
+        acc.shares = prevShares - amount;
+        acc.locked = acc.locked - amount;
+        let coin_ = coin::take(&mut acc.balance, amount, ctx);
+        coin_
+    }
+
     public fun get_account_shares(acc: &Account): u64 {
         acc.shares
     }
