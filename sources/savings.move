@@ -42,8 +42,8 @@ module savings_plan::contract {
     // AccountCap for plan members
     struct Account has key, store {
         id: UID,
-        balance: Balance<SUI>,
         planId: ID,
+        balance: Balance<SUI>,
         shares: u64
     }
 
@@ -97,25 +97,21 @@ module savings_plan::contract {
         account
     }
 
-    // public fun increase_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: Coin<SUI>, _ctx: &mut TxContext) {
-    //     // check that user passes in the right objects
-    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-
-    //     // get shares amount
-    //     let shares = coin::value(&amount);
-
-    //     // add the amount to the plan total shares
-    //     let coin_balance = coin::into_balance(amount);
-    //     balance::join(&mut plan.totalShares, coin_balance);
-
-    //     // next update the available shares
-    //     let prevAvailableFunds = &plan.availableFunds;
-    //     plan.availableFunds = *prevAvailableFunds + shares;
-
-    //     // get the old shares
-    //     let prevShares = &accountCap.shares;
-    //     accountCap.shares = *prevShares + shares;
-    // }
+    public fun increase_shares(plan: &mut Plan, acc: &mut Account, amount: Coin<SUI>, _ctx: &mut TxContext) {
+        // check that user passes in the right objects
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        // get shares amount
+        let shares = coin::value(&amount);
+        // add the amount to the plan total shares
+        let coin_balance = coin::into_balance(amount);
+        balance::join(&mut acc.balance, coin_balance);
+        // next update the available shares
+        let prevAvailableFunds = &plan.availableFunds;
+        plan.availableFunds = *prevAvailableFunds + shares;
+        // get the old shares
+        let prevShares = &acc.shares;
+        acc.shares = *prevShares + shares;
+    }
 
     // public fun redeem_shares(plan: &mut Plan, accountCap: &mut AccountCap, amount: u64, ctx: &mut TxContext): Coin<SUI> {
     //     // check that user passes in the right objects
