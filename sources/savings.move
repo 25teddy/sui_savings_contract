@@ -3,19 +3,17 @@ module savings::contract {
     use sui::coin::{Self, Coin};
     use sui::object::{Self, ID, UID};
     use sui::sui::SUI;
-    use sui::clock::{Self, Clock, timestamp_ms};
+    use sui::clock::{Clock, timestamp_ms};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext, sender};
     use sui::table::{Self, Table};
-    use std::vector;
 
     // Errors
-    const EWrongPlan: u64 = 9;
-    const EPlanBalanceNotEnough: u64 = 10;
-    const EAccountSharesNotSufficient: u64 = 11;
-    const EAlreadyVoted: u64 = 12;
-    const EVotingEnded: u64 = 13;
-    const EVotingNotEnded: u64 = 14;
+    const EWrongPlan: u64 = 0;
+    const EPlanBalanceNotEnough: u64 = 1;
+    const EAlreadyVoted: u64 = 2;
+    const EVotingEnded: u64 = 3;
+    const EVotingNotEnded: u64 = 4;
 
     // Plan data
     struct Plan has key {
@@ -195,69 +193,65 @@ module savings::contract {
         table::add(&mut saving.voters, tx_context::sender(ctx), true);
     }
 
-    // public fun execute_saving(
-    //     plan: &mut Plan,
-    //     accountCap: &mut AccountCap,
-    //     saving: &mut Saving,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext
-    // ): (bool, Coin<SUI>) {
-    //     // check that user passes in the right objects
-    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-    //     assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    public fun execute_saving(
+        plan: &mut Plan,
+        acc: &mut Account,
+        saving: &mut Saving,
+        c: &Clock,
+        ctx: &mut TxContext
+    ): (bool, Coin<SUI>) {
+        // check that user passes in the right objects
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-    //     // check that time for voting has elapsed
-    //     assert!(saving.ends < clock::timestamp_ms(clock), EVotingNotEnded);
+        // check that time for voting has elapsed
+        assert!(saving.ends < timestamp_ms(c), EVotingNotEnded);
 
-    //     // calculate voting result
-    //     let amountTotalShares = balance::value(&plan.totalShares);
+        // calculate voting result
+        let amountTotalShares = plan.availableFunds;
+        let result = (saving.votes / amountTotalShares) * 100;
 
-    //     let result = (saving.votes / amountTotalShares) * 100;
+        // set plan as ended
+        saving.ended = true;
 
-    //     // set plan as ended
-    //     saving.ended = true;
+        // unlock funds
+        plan.lockedFunds = plan.lockedFunds - saving.amount;
+        acc.locked = acc.locked - saving.amount;
 
-    //     // unlock funds
-    //     plan.lockedFunds = plan.lockedFunds - saving.amount;
+        if (result >= plan.quorum) {
+            // set saving as executed
+            saving.executed = true;
 
-    //     if (result >= plan.quorum) {
-    //         // set saving as executed
-    //         saving.executed = true;
+            // get payment coin
+            let payment = coin::take(&mut acc.balance, saving.amount, ctx);
 
-    //         // get payment coin
-    //         let payment = coin::take(&mut plan.totalShares, saving.amount, ctx);
+            // return result
+            (true, payment)
+        } else {
+            // release funds back to available funds
+            plan.availableFunds = plan.availableFunds + saving.amount;
 
-    //         // return result
-    //         (true, payment)
-    //     } else {
-    //         // release funds back to available funds
-    //         plan.availableFunds = plan.availableFunds + saving.amount;
+            // create empty coin
+            let nullCoin = coin::from_balance(balance::zero(), ctx);
 
-    //         // create empty coin
-    //         let nullCoin = coin::from_balance(balance::zero(), ctx);
+            // return result
+            (false, nullCoin)
+        }
+    }
 
-    //         // return result
-    //         (false, nullCoin)
-    //     }
-    // }
+    public fun get_account_shares(acc: &Account): u64 {
+        acc.shares
+    }
 
-    // public fun get_account_shares(accountCap: &AccountCap): u64 {
-    //     accountCap.shares
-    // }
+    public fun get_plan_locked_funds(plan: &Plan): u64 {
+        plan.lockedFunds
+    }
 
-    // public fun get_plan_total_shares(plan: &Plan): u64 {
-    //     balance::value(&plan.totalShares)
-    // }
+    public fun get_plan_available_funds(plan: &Plan): u64 {
+        plan.availableFunds
+    }
 
-    // public fun get_plan_locked_funds(plan: &Plan): u64 {
-    //     plan.lockedFunds
-    // }
-
-    // public fun get_plan_available_funds(plan: &Plan): u64 {
-    //     plan.availableFunds
-    // }
-
-    // public fun get_saving_votes(saving: &Saving): u64 {
-    //     saving.votes
-    // }
+    public fun get_saving_votes(saving: &Saving): u64 {
+        saving.votes
+    }
 }
