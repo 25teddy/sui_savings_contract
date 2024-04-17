@@ -5,7 +5,8 @@ module savings::contract {
     use sui::sui::SUI;
     use sui::clock::{Self, Clock, timestamp_ms};
     use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
+    use sui::tx_context::{Self, TxContext, sender};
+    use sui::table::{Self, Table};
     use std::vector;
 
     // Errors
@@ -33,7 +34,7 @@ module savings::contract {
         amount: u64,
         recipient: address,
         votes: u64,
-        voters: vector<address>,
+        voters: Table<address, bool>,
         ends: u64,
         executed: bool,
         ended: bool,
@@ -152,7 +153,7 @@ module savings::contract {
             amount,
             recipient,
             votes: 0,
-            voters: vector::empty(),
+            voters: table::new(ctx),
             ends,
             executed: false,
             ended: false,
@@ -170,29 +171,29 @@ module savings::contract {
         acc.locked = acc.locked + amount;
     }
 
-    // public fun vote_saving(
-    //     plan: &mut Plan,
-    //     accountCap: &mut AccountCap,
-    //     saving: &mut Saving,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext
-    // ) {
-    //     // check that user passes in the right objects
-    //     assert!(&accountCap.planId == object::uid_as_inner(&plan.id), EWrongPlan);
-    //     assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+    public fun vote(
+        plan: &mut Plan,
+        acc: &mut Account,
+        saving: &mut Saving,
+        c: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // check that user passes in the right objects
+        assert!(&acc.planId == object::uid_as_inner(&plan.id), EWrongPlan);
+        assert!(&saving.planId == object::uid_as_inner(&plan.id), EWrongPlan);
 
-    //     // check that time for voting has not elapsed
-    //     assert!(saving.ends > clock::timestamp_ms(clock), EVotingEnded);
+        // check that time for voting has not elapsed
+        assert!(saving.ends > timestamp_ms(c), EVotingEnded);
 
-    //     // check that user has not voted;
-    //     assert!(!vector::contains(&saving.voters, &tx_context::sender(ctx)), EAlreadyVoted);
+        // check that user has not voted;
+        assert!(!table::contains(&saving.voters, sender(ctx)), EAlreadyVoted);
 
-    //     // update saving votes
-    //     let prevVotes = &saving.votes;
-    //     saving.votes = *prevVotes + accountCap.shares;
+        // update saving votes
+        let prevVotes = &saving.votes;
+        saving.votes = *prevVotes + acc.shares;
 
-    //     vector::push_back(&mut saving.voters, tx_context::sender(ctx));
-    // }
+        table::add(&mut saving.voters, tx_context::sender(ctx), true);
+    }
 
     // public fun execute_saving(
     //     plan: &mut Plan,
